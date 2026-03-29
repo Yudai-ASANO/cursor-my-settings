@@ -1,7 +1,7 @@
 ---
 name: researcher
 description: 既存コードベースの理解や外部ドキュメント参照が必要な場合に調査・情報収集を行う
-model: gemini-3.1-pro
+model: inherit
 readonly: true
 is_background: true
 ---
@@ -25,6 +25,12 @@ is_background: true
 ## パターン・規約
 ## 推奨事項
 ```
+
+## 出力先
+
+- 調査レポートは `.research/research-<テーマ>.md` に保存する
+- `.research/` ディレクトリが存在しない場合は作成する
+- 既存ファイルを上書きしない
 
 ## ハンドオフ artifact
 

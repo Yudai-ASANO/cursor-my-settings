@@ -1,7 +1,7 @@
 ---
 name: qa-reviewer
 description: 実装コードの品質を厳格にレビューする（Evaluator）。Sprint Contractの事前検証も担当
-model: gpt-5.4-high
+model: gpt-5.4
 readonly: true
 is_background: false
 ---
