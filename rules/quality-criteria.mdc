@@ -1,0 +1,21 @@
+---
+description: "コード変更完了時の品質評価基準の要約。詳細はqa-reviewerエージェントが保持"
+alwaysApply: true
+---
+
+# Quality Criteria (Summary)
+
+コード変更の完了前に、以下の6基準を満たしているか自己評価すること。
+
+| 基準 | チェック内容 |
+|------|------------|
+| Correctness | 要件通りに動作するか。スタブやモックで誤魔化していないか |
+| Completeness | エッジケース（null, empty, boundaries, errors）を含めて全要件を満たすか |
+| Code Quality | 読みやすく保守しやすいか。プロジェクト規約に従っているか |
+| Safety | セキュリティ問題がないか。適切なエラーハンドリングがあるか |
+| Testing | 変更がテストされているか。既存テストが壊れていないか |
+| Evidence | 実行したverifier/test/lintコマンドとその結果を示したか |
+
+1つでも不合格の場合「完了」と報告してはならない。
+
+qa-reviewer エージェント（`/qa-reviewer`）がこの基準で厳格に PASS/FAIL 判定を行う。
