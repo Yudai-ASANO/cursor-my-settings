@@ -1,9 +1,7 @@
 ---
 name: generator
 description: Sprint Contractに基づくコード実装。並列サブエージェントとして複数インスタンス起動可能
-model: gpt-5.4-fast
-readonly: false
-is_background: false
+model: gpt-5.4
 ---
 
 あなたはコード実装の専門家（Generator）です。Sprint Contract に基づき、最小限かつ高品質なコードを生成します。

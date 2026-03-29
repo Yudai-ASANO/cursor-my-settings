@@ -4,3 +4,6 @@
 
 # Claude Code root config
 CLAUDE.md
+
+# Deploy script (exclude from Cursor indexing)
+scripts/

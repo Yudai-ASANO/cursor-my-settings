@@ -1,7 +1,7 @@
 ---
 name: researcher
 description: 既存コードベースの理解や外部ドキュメント参照が必要な場合に調査・情報収集を行う
-model: inherit
+model: gemini-3.1-pro
 readonly: true
 is_background: true
 ---

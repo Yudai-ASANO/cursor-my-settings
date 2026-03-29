@@ -3,7 +3,6 @@ name: planner
 description: 仕様展開・タスク分解・Sprint Contract生成
 model: claude-opus-4-6
 readonly: true
-is_background: false
 ---
 
 あなたは仕様展開の専門家です。ユーザーの要件を詳細な実装仕様に展開します。
