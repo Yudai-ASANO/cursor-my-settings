@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Cursor Personal Harness — Deploy Script
-# Symlinks agents/ and rules/ from this project to ~/.cursor/
+# Symlinks agents/, rules/, and skills/ from this project to ~/.cursor/
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
@@ -11,8 +11,10 @@ BACKUP_DIR="$CURSOR_DIR/.backup/$(date +%Y%m%d-%H%M%S)"
 
 AGENTS_SRC="$PROJECT_DIR/agents"
 RULES_SRC="$PROJECT_DIR/rules"
+SKILLS_SRC="$PROJECT_DIR/skills"
 AGENTS_DST="$CURSOR_DIR/agents"
 RULES_DST="$CURSOR_DIR/rules"
+SKILLS_DST="$CURSOR_DIR/skills"
 
 DRY_RUN=false
 UNINSTALL=false
@@ -77,6 +79,26 @@ if $STATUS; then
             echo "  ❌ $name (not deployed)"
         fi
     done
+    echo ""
+    echo "Skills ($SKILLS_DST):"
+    if [ -d "$SKILLS_SRC" ]; then
+        for d in "$SKILLS_SRC"/*/; do
+            name="$(basename "$d")"
+            target="$SKILLS_DST/$name"
+            if [ -L "$target" ]; then
+                actual="$(readlink "$target")"
+                if [ "$actual" = "${d%/}" ]; then
+                    echo "  ✅ $name → $actual"
+                else
+                    echo "  ⚠️  $name → $actual (unexpected target)"
+                fi
+            elif [ -d "$target" ]; then
+                echo "  ⚠️  $name (regular directory, not symlink)"
+            else
+                echo "  ❌ $name (not deployed)"
+            fi
+        done
+    fi
     exit 0
 fi
 
@@ -110,6 +132,21 @@ if $UNINSTALL; then
             removed=$((removed + 1))
         fi
     done
+    if [ -d "$SKILLS_SRC" ]; then
+        for d in "$SKILLS_SRC"/*/; do
+            name="$(basename "$d")"
+            target="$SKILLS_DST/$name"
+            if [ -L "$target" ] && [ "$(readlink "$target")" = "${d%/}" ]; then
+                if $DRY_RUN; then
+                    echo "  [dry-run] Would remove: $target"
+                else
+                    rm "$target"
+                    echo "  Removed: $target"
+                fi
+                removed=$((removed + 1))
+            fi
+        done
+    fi
     echo "Done. Removed $removed symlink(s)."
     exit 0
 fi
@@ -120,7 +157,7 @@ $DRY_RUN && echo "(dry-run mode — no changes will be made)"
 echo ""
 
 # Create target directories
-for dir in "$AGENTS_DST" "$RULES_DST"; do
+for dir in "$AGENTS_DST" "$RULES_DST" "$SKILLS_DST"; do
     if [ ! -d "$dir" ]; then
         if $DRY_RUN; then
             echo "  [dry-run] Would create: $dir"
@@ -153,6 +190,19 @@ link_file() {
             echo "  📦 Backed up: $dst → $BACKUP_DIR/$name"
         else
             echo "  [dry-run] Would backup and relink: $name"
+            return
+        fi
+    elif [ -d "$dst" ]; then
+        # Regular directory — backup before replacing (important for skills/)
+        if ! $DRY_RUN; then
+            if ! $backup_needed; then
+                mkdir -p "$BACKUP_DIR"
+                backup_needed=true
+            fi
+            mv "$dst" "$BACKUP_DIR/$name"
+            echo "  📦 Backed up: $dst → $BACKUP_DIR/$name"
+        else
+            echo "  [dry-run] Would backup and link: $name"
             return
         fi
     elif [ -f "$dst" ]; then
@@ -199,6 +249,16 @@ echo "Rules:"
 for f in "$RULES_SRC"/*.mdc; do
     link_file "$f" "$RULES_DST/$(basename "$f")"
 done
+
+echo ""
+echo "Skills:"
+if [ -d "$SKILLS_SRC" ]; then
+    for d in "$SKILLS_SRC"/*/; do
+        name="$(basename "$d")"
+        # Skills are symlinked as directories (each skill is a folder with SKILL.md)
+        link_file "${d%/}" "$SKILLS_DST/$name"
+    done
+fi
 
 echo ""
 echo "Done."

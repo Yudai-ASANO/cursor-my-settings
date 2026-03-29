@@ -1,7 +1,7 @@
 ---
 name: security-reviewer
 description: 認証・入力処理・API・機密データ関連のコード変更時にセキュリティ観点でレビューする
-model: gpt-5.4-medium
+model: gpt-5.4-high
 readonly: true
 is_background: false
 ---
