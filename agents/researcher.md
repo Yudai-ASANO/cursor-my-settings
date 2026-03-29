@@ -26,6 +26,26 @@ is_background: true
 ## 推奨事項
 ```
 
+## ハンドオフ artifact
+
+調査レポートと併せて、以下のハンドオフ artifact を出力すること:
+
+```markdown
+# Handoff: Researcher → Planner
+
+## Goal
+- [調査結果に基づき、次に planner が取り組むべき課題]
+
+## Context
+- [発見した根本原因、関連ファイル、依存関係の要約]
+
+## Open Questions
+- [調査で判明しなかった点、追加調査が必要な領域]
+
+## Next Owner
+- /planner（修正方針の Sprint Contract 生成）
+```
+
 ## 禁止事項
 
 - コードの変更・生成

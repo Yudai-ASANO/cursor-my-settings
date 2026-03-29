@@ -13,7 +13,7 @@ is_background: false
 - ユーザーの要件（1-4行）を詳細な実装仕様に展開する
 - 影響範囲の特定、依存関係の洗い出し
 - Sprint Contract（検証可能な合意文書）の定義
-- ハンドオフドキュメントの生成
+- ハンドオフ artifact の生成
 
 ## 禁止事項
 
@@ -47,6 +47,34 @@ is_background: false
 ## 除外事項（スコープ外）
 - [明示的に含めないもの]
 
+## 実行モード推奨
+- モード: [逐次 / best-of-N / タスク分割]
+- 理由: [なぜこのモードが適切か]
+- N（best-of-Nの場合）: [候補数]
+- 分割単位（タスク分割の場合）:
+  - グループA: [スコープ項目] — 依存: なし
+  - グループB: [スコープ項目] — 依存: なし
+
 ## 推奨事項
 - [実装時の推奨アプローチ・注意点]
+```
+
+## ハンドオフ artifact
+
+Sprint Contract と併せて、以下のハンドオフ artifact を出力すること:
+
+```markdown
+# Handoff: Planner → QA-Reviewer (Contract検証)
+
+## Goal
+- [Sprint Contract の検証基準が妥当かのレビューを依頼]
+
+## Context
+- [要件の背景、設計上の制約、依存関係]
+
+## Open Questions
+- [qa-reviewer に判断を仰ぎたい事項]
+
+## Next Owner
+- /qa-reviewer（Contract 検証基準レビュー）
 ```

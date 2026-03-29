@@ -27,6 +27,26 @@ is_background: false
 ## リスク
 ```
 
+## ハンドオフ artifact
+
+アーキテクチャ評価と併せて、以下のハンドオフ artifact を出力すること:
+
+```markdown
+# Handoff: Architect → Planner
+
+## Goal
+- [評価結果に基づき、planner が Sprint Contract を作成するための方針]
+
+## Context
+- [推奨方針、トレードオフ分析の要約、採用すべき設計パターン]
+
+## Open Questions
+- [設計上の未決定事項、ユーザー判断が必要な点]
+
+## Next Owner
+- /planner（Sprint Contract 生成）
+```
+
 ## 禁止事項
 
 - コードの変更・生成
