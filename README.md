@@ -8,6 +8,7 @@ Rules（行動規約）・Agents（専門エージェント）・Skills（ユー
 ```
 .
 ├── agents/          # サブエージェント定義（8種）
+├── hooks/           # コマンドフック（7ファイル）
 ├── rules/           # 常時適用 / 条件適用のルール（7種）
 ├── scripts/         # デプロイスクリプト
 └── skills/          # ユーザーが明示的に起動するワークフロー（10種）
@@ -31,7 +32,7 @@ bash scripts/deploy.sh --status
 bash scripts/deploy.sh --uninstall
 ```
 
-デプロイは**コピー方式**（シンボリックリンクではない）。既存ファイルは `~/.cursor/.backup/<timestamp>/` に退避される。
+デプロイは**コピー方式**（シンボリックリンクではない）。既存ファイルは `~/.cursor/.backup/<timestamp>/` に退避される。Hooks は `hooks/hooks.json` → `~/.cursor/hooks.json`、`hooks/*.sh` → `~/.cursor/hooks/`（実行権限付与）の2系統でデプロイされる。
 
 ---
 
@@ -48,6 +49,22 @@ bash scripts/deploy.sh --uninstall
 | `anti-patterns.mdc` | 常時 | ハルシネーション防止・スコープ規律・ループ防止・コンテキスト規律 |
 | `security.mdc` | glob 条件付き | auth / api / env 等のファイル変更時に自動適用。プロンプトインジェクション防御含む |
 | `git-workflow.mdc` | 手動読込 | Conventional Commits・PR作成ワークフロー |
+
+---
+
+## Hooks（コマンドフック）
+
+シェルコマンド実行・ツール使用・コンテキスト圧縮の各タイミングで自動実行されるフック群。`hooks.json` で3種のトリガー（`beforeShellExecution` / `preToolUse` / `preCompact`）を定義し、各シェルスクリプトを呼び出す。
+
+| フック | 概要 |
+| ------ | ---- |
+| `hooks.json` | フック設定定義（トリガー条件・タイムアウト・マッチャーの指定） |
+| `_lib.sh` | フック共通ライブラリ（stdin パース・fail-mode 制御） |
+| `dangerous-command-blocker.sh` | `rm -rf`・`sudo`・`mkfs` 等の危険コマンドをブロック |
+| `doc-blocker.sh` | 許可リスト外の Markdown ファイル自動生成をブロック |
+| `git-push-safety.sh` | force push を検知し、保護ブランチ（main/master）への force push をブロック |
+| `pre-commit-gate.sh` | `git commit` 前に lint / typecheck を実行 |
+| `pre-compact-checkpoint.sh` | コンテキスト圧縮前に自動コミットでチェックポイントを作成 |
 
 ---
 
@@ -99,7 +116,7 @@ Skill はメッセージに `@skill名` を添付し、本文に引数を記載�
 
 #### `/orchestrate` — ワークフロー駆動
 
-**使うとき**: 機能追加・バグ修正・リファクタリング・セキュリティ修正など、複数ステップを要する開発タスクを依頼するとき。
+**使うとき**: 機能追加・バグ修正・リファクタリング・セキュリティ修正・デバッグ・テスト駆動開発など、複数ステップを要する開発タスクを依頼するとき。
 
 エージェントチェーンを自動で駆動し、計画 → レビュー → 実装 → 品質検証の一連のプロセスを実行する。タスク種別（feature / bugfix / refactor / security / debug / tdd）を自動判定し、最適なチェーンを選択する。
 
