@@ -1,7 +1,7 @@
 ---
 name: orchestrate
 description: タスク種別に応じたエージェントチェーンの自動駆動（feature/bugfix/refactor/security）
-disable-model-invocation: true
+disable-model-invocation: false
 ---
 
 # /orchestrate — ワークフロー駆動

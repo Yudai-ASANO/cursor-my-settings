@@ -13,11 +13,12 @@ alwaysApply: true
 | bugfix | バグ修正、不具合対応の要求 |
 | refactor | リファクタリング、構造改善の要求 |
 | security | セキュリティ修正、脆弱性対応の要求 |
+| debug | バグの根本原因が不明で体系的デバッグが必要な場合 |
+| tdd | テスト駆動開発（RED→GREEN→REFACTOR）での実装要求 |
 
 ## 除外条件（直接実行してよい）
 
-- 1ファイル・数行の修正
-- 設定ファイル編集（JSON, YAML, TOML）
+- 設定ファイルの値変更（JSON, YAML, TOML のパラメータ変更）
 - ドキュメント・README の編集
 - git 操作（コミット、ブランチ、マージ）
 - 質問への回答・説明・調査
@@ -32,6 +33,8 @@ alwaysApply: true
 | bugfix | `/researcher` → `/planner` → `/qa-reviewer`(Contract検証) → [ユーザー確認] → `/generator` → `/qa-reviewer` |
 | refactor | `/architect` → `/planner` → `/qa-reviewer`(Contract検証) → [ユーザー確認] → `/generator` → `/qa-reviewer` |
 | security | `/security-reviewer`(分析) → `/planner` → `/qa-reviewer`(Contract検証) → [ユーザー確認] → `/generator` → `/security-reviewer`(検証) → `/qa-reviewer` |
+| debug | `/debugger` → `/verifier` → `/qa-reviewer` |
+| tdd | `/planner` → `/qa-reviewer`(Contract検証) → [ユーザー確認] → `/generator`(TDDモード) → `/qa-reviewer` |
 
 ---
 

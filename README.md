@@ -7,7 +7,7 @@ Rules（行動規約）・Agents（専門エージェント）・Skills（ユー
 
 ```
 .
-├── agents/          # サブエージェント定義（6種）
+├── agents/          # サブエージェント定義（8種）
 ├── rules/           # 常時適用 / 条件適用のルール（7種）
 ├── scripts/         # デプロイスクリプト
 └── skills/          # ユーザーが明示的に起動するワークフロー（10種）
@@ -57,12 +57,14 @@ bash scripts/deploy.sh --uninstall
 
 | エージェント | 役割 | 読取専用 |
 |-------------|------|---------|
-| `researcher` | コードベース・外部情報の調査。構造化レポートを `.research/` に出力 | Yes |
+| `researcher` | コードベース・外部情報の調査。構造化レポートを `.research/` に出力。`/explain` の委譲先 | Yes |
 | `architect` | アーキテクチャ評価・設計トレードオフ分析 | Yes |
 | `planner` | 要件を Sprint Contract（実装スコープ + 検証基準）に展開 | Yes |
-| `generator` | Sprint Contract に基づくコード実装。並列起動対応 | No |
+| `generator` | Sprint Contract に基づくコード実装。並列起動対応。`/build-fix` `/tdd` の委譲先 | No |
 | `qa-reviewer` | 5軸の品質評価（PASS/FAIL判定）。Sprint Contract の事前検証も担当 | Yes |
 | `security-reviewer` | OWASP Top 10 ベースのセキュリティレビュー（分析/検証の2フェーズ） | Yes |
+| `verifier` | ビルド・テスト・lint 実行 + 要件照合 + 差分監査。Verification Report 出力 | No |
+| `debugger` | 4フェーズデバッグ（症状記録→仮説構築→仮説検証→修正+防御） | No |
 
 ### エージェントチェーン
 
@@ -74,6 +76,8 @@ bash scripts/deploy.sh --uninstall
 | **bugfix** | researcher → planner → qa-reviewer(Contract検証) → [ユーザー確認] → generator → qa-reviewer |
 | **refactor** | architect → planner → qa-reviewer(Contract検証) → [ユーザー確認] → generator → qa-reviewer |
 | **security** | security-reviewer(分析) → planner → qa-reviewer(Contract検証) → [ユーザー確認] → generator → security-reviewer(検証) → qa-reviewer |
+| **debug** | debugger → verifier → qa-reviewer |
+| **tdd** | planner → qa-reviewer(Contract検証) → [ユーザー確認] → generator(TDDモード) → qa-reviewer |
 
 ### 品質ゲート
 
@@ -97,7 +101,7 @@ Skill はメッセージに `@skill名` を添付し、本文に引数を記載�
 
 **使うとき**: 機能追加・バグ修正・リファクタリング・セキュリティ修正など、複数ステップを要する開発タスクを依頼するとき。
 
-エージェントチェーンを自動で駆動し、計画 → レビュー → 実装 → 品質検証の一連のプロセスを実行する。タスク種別（feature / bugfix / refactor / security）を自動判定し、最適なチェーンを選択する。
+エージェントチェーンを自動で駆動し、計画 → レビュー → 実装 → 品質検証の一連のプロセスを実行する。タスク種別（feature / bugfix / refactor / security / debug / tdd）を自動判定し、最適なチェーンを選択する。
 
 ```
 /orchestrate feature ユーザー認証の追加
@@ -148,7 +152,7 @@ qa-reviewer サブエージェントが5軸（Correctness / Completeness / Code 
 
 **使うとき**: 「実装が完了した」と宣言する前に、漏れがないか最終確認したいとき。
 
-ビルド・テスト・lint・型チェック・フォーマット・要件照合・差分確認を実際に実行し、結果を証拠付きで報告する。「おそらく通るはず」ではなく、コマンド出力を根拠にする。
+verifier サブエージェントがビルド・テスト・lint・型チェック・フォーマット・要件照合・差分確認を実際に実行し、結果を証拠付きの Verification Report で報告する。
 
 ```
 /verify
@@ -160,7 +164,7 @@ qa-reviewer サブエージェントが5軸（Correctness / Completeness / Code 
 
 **使うとき**: バグやテスト失敗の原因がわからず、闇雲に修正を試みる前に根本原因を特定したいとき。
 
-4フェーズ（症状の記録 → 仮説の構築 → 仮説の検証 → 修正と防御）で体系的にデバッグする。ランダムな print 文や場当たり的な修正を防ぐ。
+debugger サブエージェントが4フェーズで体系的にデバッグし、修正後は verifier → qa-reviewer のチェーンで品質を担保する。debug チェーン（debugger → verifier → qa-reviewer）を完走させる。
 
 ```
 /debug ログイン後にリダイレクトされない
@@ -173,7 +177,7 @@ qa-reviewer サブエージェントが5軸（Correctness / Completeness / Code 
 
 **使うとき**: ビルドやコンパイルが通らないとき。最小限の変更でエラーを解消したいとき。
 
-エラーをシンプルなものから順に修正し、1つ修正するごとにビルドを再実行して進捗を確認する。アーキテクチャ変更は行わない。
+generator サブエージェントに制約付き（最小 diff、リファクタリング禁止）で修正を委譲する。1つ修正するごとにビルドを再実行して進捗を確認する。
 
 ```
 /build-fix
@@ -186,7 +190,7 @@ qa-reviewer サブエージェントが5軸（Correctness / Completeness / Code 
 
 **使うとき**: 新機能やバグ修正をテストファーストで進めたいとき。
 
-RED（失敗するテスト）→ GREEN（最小限の実装）→ REFACTOR（改善）のサイクルを厳格に実行する。テストを書く前にプロダクションコードを書くことを禁止する。
+tdd チェーン（planner → qa-reviewer → generator(TDD) → qa-reviewer）をフルで駆動する。generator に RED→GREEN→REFACTOR の各ステップでテスト実行を強制する。
 
 ```
 /tdd ユーザー登録のバリデーション
@@ -199,7 +203,7 @@ RED（失敗するテスト）→ GREEN（最小限の実装）→ REFACTOR（�
 
 **使うとき**: コードの振る舞いは変えずに、構造・可読性・保守性を改善したいとき。
 
-architect サブエージェントが現状分析と改善方針を提案し、ユーザーの同意後に実行する。テストがパスする状態を常に維持する。
+refactor チェーン（architect → planner → qa-reviewer → generator → qa-reviewer）をフルで駆動する。テストがパスする状態を常に維持する。
 
 ```
 /refactor src/services/payment.ts の責務分離
@@ -212,7 +216,7 @@ architect サブエージェントが現状分析と改善方針を提案し、�
 
 **使うとき**: コードやアーキテクチャの仕組みを理解したいとき。コードの変更は不要で、説明だけが欲しいとき。
 
-「何をしているか」「どう動いているか」「なぜこう設計されているか」「依存関係」の4観点で説明する。読み取り専用で、改善提案は求められない限り行わない。
+researcher サブエージェントが「何をしているか」「どう動いているか」「なぜこう設計されているか」「依存関係」の4観点で調査・説明する。読み取り専用で、改善提案は求められない限り行わない。
 
 ```
 /explain src/middleware/auth.ts
