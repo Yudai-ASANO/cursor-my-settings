@@ -13,9 +13,13 @@ MANIFEST="$CURSOR_DIR/.deploy-manifest"
 AGENTS_SRC="$PROJECT_DIR/agents"
 RULES_SRC="$PROJECT_DIR/rules"
 SKILLS_SRC="$PROJECT_DIR/skills"
+HOOKS_SRC="$PROJECT_DIR/hooks"
+HOOKS_JSON_SRC="$HOOKS_SRC/hooks.json"
 AGENTS_DST="$CURSOR_DIR/agents"
 RULES_DST="$CURSOR_DIR/rules"
 SKILLS_DST="$CURSOR_DIR/skills"
+HOOKS_DST="$CURSOR_DIR/hooks"
+HOOKS_JSON_DST="$CURSOR_DIR/hooks.json"
 
 DRY_RUN=false
 UNINSTALL=false
@@ -106,6 +110,38 @@ if $STATUS; then
         done
     fi
     echo ""
+    echo "Hooks:"
+    if [ -f "$HOOKS_JSON_SRC" ]; then
+        if [ -L "$HOOKS_JSON_DST" ]; then
+            echo "  ⚠️  hooks.json (symlink — run deploy to convert)"
+        elif [ -f "$HOOKS_JSON_DST" ]; then
+            if [ "$(checksum "$HOOKS_JSON_SRC")" = "$(checksum "$HOOKS_JSON_DST")" ]; then
+                echo "  ✅ hooks.json (synced)"
+            else
+                echo "  ⚠️  hooks.json (modified)"
+            fi
+        else
+            echo "  ❌ hooks.json (not deployed)"
+        fi
+    fi
+    if [ -d "$HOOKS_SRC" ]; then
+        for f in "$HOOKS_SRC"/*.sh; do
+            name="$(basename "$f")"
+            target="$HOOKS_DST/$name"
+            if [ -L "$target" ]; then
+                echo "  ⚠️  $name (symlink — run deploy to convert)"
+            elif [ -f "$target" ]; then
+                if [ "$(checksum "$f")" = "$(checksum "$target")" ]; then
+                    echo "  ✅ $name (synced)"
+                else
+                    echo "  ⚠️  $name (modified)"
+                fi
+            else
+                echo "  ❌ $name (not deployed)"
+            fi
+        done
+    fi
+    echo ""
     if [ -f "$MANIFEST" ]; then
         echo "Manifest: $MANIFEST ($(wc -l < "$MANIFEST" | tr -d ' ') entries)"
     else
@@ -184,6 +220,39 @@ if $UNINSTALL; then
                 fi
             done
         fi
+        if [ -f "$HOOKS_JSON_SRC" ] && { [ -L "$HOOKS_JSON_DST" ] || [ -f "$HOOKS_JSON_DST" ]; }; then
+            if $DRY_RUN; then
+                echo "  [dry-run] Would remove: $HOOKS_JSON_DST"
+            else
+                rm "$HOOKS_JSON_DST"
+                echo "  Removed: $HOOKS_JSON_DST"
+            fi
+            removed=$((removed + 1))
+        fi
+        if [ -d "$HOOKS_SRC" ]; then
+            for f in "$HOOKS_SRC"/*.sh; do
+                name="$(basename "$f")"
+                target="$HOOKS_DST/$name"
+                if [ -L "$target" ] || [ -f "$target" ]; then
+                    if $DRY_RUN; then
+                        echo "  [dry-run] Would remove: $target"
+                    else
+                        rm "$target"
+                        echo "  Removed: $target"
+                    fi
+                    removed=$((removed + 1))
+                fi
+            done
+        fi
+    fi
+
+    if [ -d "$HOOKS_DST" ] && [ -z "$(find "$HOOKS_DST" -mindepth 1 -maxdepth 1 2>/dev/null)" ]; then
+        if $DRY_RUN; then
+            echo "  [dry-run] Would remove empty directory: $HOOKS_DST"
+        else
+            rmdir "$HOOKS_DST"
+            echo "  Removed empty directory: $HOOKS_DST"
+        fi
     fi
 
     echo "Done. Removed $removed item(s)."
@@ -195,7 +264,7 @@ echo "=== Deploying Cursor Harness ==="
 $DRY_RUN && echo "(dry-run mode — no changes will be made)"
 echo ""
 
-for dir in "$AGENTS_DST" "$RULES_DST" "$SKILLS_DST"; do
+for dir in "$AGENTS_DST" "$RULES_DST" "$SKILLS_DST" "$HOOKS_DST"; do
     if [ ! -d "$dir" ]; then
         if $DRY_RUN; then
             echo "  [dry-run] Would create: $dir"
@@ -219,7 +288,9 @@ ensure_backup_dir() {
 deploy_file() {
     local src="$1"
     local dst="$2"
-    local name="$(basename "$src")"
+    local name=""
+
+    name="$(basename "$src")"
 
     if [ -L "$dst" ]; then
         if ! $DRY_RUN; then
@@ -258,7 +329,9 @@ deploy_file() {
 deploy_dir() {
     local src="$1"
     local dst="$2"
-    local name="$(basename "$src")"
+    local name=""
+
+    name="$(basename "$src")"
 
     if [ -L "$dst" ]; then
         if ! $DRY_RUN; then
@@ -294,6 +367,18 @@ deploy_dir() {
     manifest_entries+=("$dst")
 }
 
+deploy_executable_file() {
+    local src="$1"
+    local dst="$2"
+
+    deploy_file "$src" "$dst"
+    if $DRY_RUN; then
+        echo "  [dry-run] Would chmod +x: $dst"
+    else
+        chmod +x "$dst"
+    fi
+}
+
 CLAUDE_AGENTS="$HOME/.claude/agents"
 if [ -d "$CLAUDE_AGENTS" ]; then
     for f in "$AGENTS_SRC"/*.md; do
@@ -321,6 +406,17 @@ if [ -d "$SKILLS_SRC" ]; then
     for d in "$SKILLS_SRC"/*/; do
         name="$(basename "$d")"
         deploy_dir "${d%/}" "$SKILLS_DST/$name"
+    done
+fi
+
+echo ""
+echo "Hooks:"
+if [ -f "$HOOKS_JSON_SRC" ]; then
+    deploy_file "$HOOKS_JSON_SRC" "$HOOKS_JSON_DST"
+fi
+if [ -d "$HOOKS_SRC" ]; then
+    for f in "$HOOKS_SRC"/*.sh; do
+        deploy_executable_file "$f" "$HOOKS_DST/$(basename "$f")"
     done
 fi
 

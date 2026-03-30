@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "hooks": {
+    "beforeShellExecution": [
+      {
+        "command": "./hooks/dangerous-command-blocker.sh",
+        "timeout": 5,
+        "matcher": "rm\\s+-\\S*r\\S*f|rm\\s+-\\S*f\\S*r|mkfs|\\bdd\\b.*if=|sudo\\s|su\\s|chmod\\s+777|>/dev/|>\\s+/dev/|git\\s+reset\\s+--hard|git\\s+clean\\s+-\\S*f|curl.*\\|.*sh|wget.*\\|.*sh",
+        "failClosed": true
+      },
+      {
+        "command": "./hooks/pre-commit-gate.sh",
+        "timeout": 120,
+        "matcher": "git commit"
+      },
+      {
+        "command": "./hooks/git-push-safety.sh",
+        "timeout": 5,
+        "matcher": "git push",
+        "failClosed": true
+      }
+    ],
+    "preToolUse": [
+      {
+        "command": "./hooks/doc-blocker.sh",
+        "timeout": 5,
+        "matcher": "Write"
+      }
+    ],
+    "preCompact": [
+      {
+        "command": "./hooks/pre-compact-checkpoint.sh",
+        "timeout": 30
+      }
+    ]
+  }
+}
