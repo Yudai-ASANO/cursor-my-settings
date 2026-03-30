@@ -1,9 +1,0 @@
-# Claude Code / Codex CLI config directories
-.claude/
-.codex/
-
-# Claude Code root config
-CLAUDE.md
-
-# Deploy script (exclude from Cursor indexing)
-scripts/

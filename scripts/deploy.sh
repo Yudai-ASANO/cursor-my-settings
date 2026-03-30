@@ -2,12 +2,13 @@
 set -euo pipefail
 
 # Cursor Personal Harness — Deploy Script
-# Symlinks agents/, rules/, and skills/ from this project to ~/.cursor/
+# Copies agents/, rules/, and skills/ from this project to ~/.cursor/
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 CURSOR_DIR="$HOME/.cursor"
 BACKUP_DIR="$CURSOR_DIR/.backup/$(date +%Y%m%d-%H%M%S)"
+MANIFEST="$CURSOR_DIR/.deploy-manifest"
 
 AGENTS_SRC="$PROJECT_DIR/agents"
 RULES_SRC="$PROJECT_DIR/rules"
@@ -23,10 +24,10 @@ STATUS=false
 usage() {
     echo "Usage: $0 [--dry-run|--uninstall|--status]"
     echo ""
-    echo "  (no args)    Deploy symlinks to ~/.cursor/"
+    echo "  (no args)    Deploy (copy) files to ~/.cursor/"
     echo "  --dry-run    Show what would be done without making changes"
-    echo "  --uninstall  Remove symlinks created by this script"
-    echo "  --status     Show current symlink status"
+    echo "  --uninstall  Remove files deployed by this script"
+    echo "  --status     Show sync status (checksum comparison)"
     exit 0
 }
 
@@ -40,6 +41,14 @@ for arg in "$@"; do
     esac
 done
 
+checksum() {
+    shasum -a 256 "$1" 2>/dev/null | awk '{print $1}'
+}
+
+checksum_dir() {
+    find "$1" -type f -print0 | sort -z | xargs -0 shasum -a 256 2>/dev/null | awk '{print $1}' | shasum -a 256 | awk '{print $1}'
+}
+
 # --- Status ---
 if $STATUS; then
     echo "=== Cursor Harness Status ==="
@@ -49,14 +58,13 @@ if $STATUS; then
         name="$(basename "$f")"
         target="$AGENTS_DST/$name"
         if [ -L "$target" ]; then
-            actual="$(readlink "$target")"
-            if [ "$actual" = "$f" ]; then
-                echo "  ✅ $name → $actual"
-            else
-                echo "  ⚠️  $name → $actual (unexpected target)"
-            fi
+            echo "  ⚠️  $name (symlink — run deploy to convert)"
         elif [ -f "$target" ]; then
-            echo "  ⚠️  $name (regular file, not symlink)"
+            if [ "$(checksum "$f")" = "$(checksum "$target")" ]; then
+                echo "  ✅ $name (synced)"
+            else
+                echo "  ⚠️  $name (modified)"
+            fi
         else
             echo "  ❌ $name (not deployed)"
         fi
@@ -67,14 +75,13 @@ if $STATUS; then
         name="$(basename "$f")"
         target="$RULES_DST/$name"
         if [ -L "$target" ]; then
-            actual="$(readlink "$target")"
-            if [ "$actual" = "$f" ]; then
-                echo "  ✅ $name → $actual"
-            else
-                echo "  ⚠️  $name → $actual (unexpected target)"
-            fi
+            echo "  ⚠️  $name (symlink — run deploy to convert)"
         elif [ -f "$target" ]; then
-            echo "  ⚠️  $name (regular file, not symlink)"
+            if [ "$(checksum "$f")" = "$(checksum "$target")" ]; then
+                echo "  ✅ $name (synced)"
+            else
+                echo "  ⚠️  $name (modified)"
+            fi
         else
             echo "  ❌ $name (not deployed)"
         fi
@@ -86,18 +93,23 @@ if $STATUS; then
             name="$(basename "$d")"
             target="$SKILLS_DST/$name"
             if [ -L "$target" ]; then
-                actual="$(readlink "$target")"
-                if [ "$actual" = "${d%/}" ]; then
-                    echo "  ✅ $name → $actual"
-                else
-                    echo "  ⚠️  $name → $actual (unexpected target)"
-                fi
+                echo "  ⚠️  $name (symlink — run deploy to convert)"
             elif [ -d "$target" ]; then
-                echo "  ⚠️  $name (regular directory, not symlink)"
+                if [ "$(checksum_dir "${d%/}")" = "$(checksum_dir "$target")" ]; then
+                    echo "  ✅ $name (synced)"
+                else
+                    echo "  ⚠️  $name (modified)"
+                fi
             else
                 echo "  ❌ $name (not deployed)"
             fi
         done
+    fi
+    echo ""
+    if [ -f "$MANIFEST" ]; then
+        echo "Manifest: $MANIFEST ($(wc -l < "$MANIFEST" | tr -d ' ') entries)"
+    else
+        echo "Manifest: not found (deploy has not been run with copy mode yet)"
     fi
     exit 0
 fi
@@ -106,37 +118,35 @@ fi
 if $UNINSTALL; then
     echo "=== Uninstalling Cursor Harness ==="
     removed=0
-    for f in "$AGENTS_SRC"/*.md; do
-        name="$(basename "$f")"
-        target="$AGENTS_DST/$name"
-        if [ -L "$target" ] && [ "$(readlink "$target")" = "$f" ]; then
+
+    if [ -f "$MANIFEST" ]; then
+        while IFS= read -r entry; do
             if $DRY_RUN; then
-                echo "  [dry-run] Would remove: $target"
+                echo "  [dry-run] Would remove: $entry"
+            elif [ -f "$entry" ]; then
+                rm "$entry"
+                echo "  Removed: $entry"
+            elif [ -d "$entry" ]; then
+                rm -r "$entry"
+                echo "  Removed: $entry"
             else
-                rm "$target"
-                echo "  Removed: $target"
+                echo "  Skipped (not found): $entry"
+                continue
             fi
             removed=$((removed + 1))
+        done < "$MANIFEST"
+
+        if ! $DRY_RUN; then
+            rm "$MANIFEST"
+            echo "  Removed: $MANIFEST"
         fi
-    done
-    for f in "$RULES_SRC"/*.mdc; do
-        name="$(basename "$f")"
-        target="$RULES_DST/$name"
-        if [ -L "$target" ] && [ "$(readlink "$target")" = "$f" ]; then
-            if $DRY_RUN; then
-                echo "  [dry-run] Would remove: $target"
-            else
-                rm "$target"
-                echo "  Removed: $target"
-            fi
-            removed=$((removed + 1))
-        fi
-    done
-    if [ -d "$SKILLS_SRC" ]; then
-        for d in "$SKILLS_SRC"/*/; do
-            name="$(basename "$d")"
-            target="$SKILLS_DST/$name"
-            if [ -L "$target" ] && [ "$(readlink "$target")" = "${d%/}" ]; then
+    else
+        echo "  No manifest found. Falling back to name-based detection..."
+        echo ""
+        for f in "$AGENTS_SRC"/*.md; do
+            name="$(basename "$f")"
+            target="$AGENTS_DST/$name"
+            if [ -L "$target" ] || [ -f "$target" ]; then
                 if $DRY_RUN; then
                     echo "  [dry-run] Would remove: $target"
                 else
@@ -146,8 +156,37 @@ if $UNINSTALL; then
                 removed=$((removed + 1))
             fi
         done
+        for f in "$RULES_SRC"/*.mdc; do
+            name="$(basename "$f")"
+            target="$RULES_DST/$name"
+            if [ -L "$target" ] || [ -f "$target" ]; then
+                if $DRY_RUN; then
+                    echo "  [dry-run] Would remove: $target"
+                else
+                    rm "$target"
+                    echo "  Removed: $target"
+                fi
+                removed=$((removed + 1))
+            fi
+        done
+        if [ -d "$SKILLS_SRC" ]; then
+            for d in "$SKILLS_SRC"/*/; do
+                name="$(basename "$d")"
+                target="$SKILLS_DST/$name"
+                if [ -L "$target" ] || [ -d "$target" ]; then
+                    if $DRY_RUN; then
+                        echo "  [dry-run] Would remove: $target"
+                    else
+                        rm -r "$target"
+                        echo "  Removed: $target"
+                    fi
+                    removed=$((removed + 1))
+                fi
+            done
+        fi
     fi
-    echo "Done. Removed $removed symlink(s)."
+
+    echo "Done. Removed $removed item(s)."
     exit 0
 fi
 
@@ -156,7 +195,6 @@ echo "=== Deploying Cursor Harness ==="
 $DRY_RUN && echo "(dry-run mode — no changes will be made)"
 echo ""
 
-# Create target directories
 for dir in "$AGENTS_DST" "$RULES_DST" "$SKILLS_DST"; do
     if [ ! -d "$dir" ]; then
         if $DRY_RUN; then
@@ -168,67 +206,94 @@ for dir in "$AGENTS_DST" "$RULES_DST" "$SKILLS_DST"; do
     fi
 done
 
+manifest_entries=()
 backup_needed=false
-link_file() {
+
+ensure_backup_dir() {
+    if ! $backup_needed; then
+        mkdir -p "$BACKUP_DIR"
+        backup_needed=true
+    fi
+}
+
+deploy_file() {
     local src="$1"
     local dst="$2"
     local name="$(basename "$src")"
 
     if [ -L "$dst" ]; then
-        local current="$(readlink "$dst")"
-        if [ "$current" = "$src" ]; then
-            echo "  ✅ $name (already linked)"
-            return
-        fi
-        # Symlink to different target — backup and replace
         if ! $DRY_RUN; then
-            if ! $backup_needed; then
-                mkdir -p "$BACKUP_DIR"
-                backup_needed=true
-            fi
+            ensure_backup_dir
             mv "$dst" "$BACKUP_DIR/$name"
-            echo "  📦 Backed up: $dst → $BACKUP_DIR/$name"
+            echo "  📦 Backed up (symlink): $dst → $BACKUP_DIR/$name"
         else
-            echo "  [dry-run] Would backup and relink: $name"
-            return
-        fi
-    elif [ -d "$dst" ]; then
-        # Regular directory — backup before replacing (important for skills/)
-        if ! $DRY_RUN; then
-            if ! $backup_needed; then
-                mkdir -p "$BACKUP_DIR"
-                backup_needed=true
-            fi
-            mv "$dst" "$BACKUP_DIR/$name"
-            echo "  📦 Backed up: $dst → $BACKUP_DIR/$name"
-        else
-            echo "  [dry-run] Would backup and link: $name"
+            echo "  [dry-run] Would backup symlink and copy: $name"
             return
         fi
     elif [ -f "$dst" ]; then
-        # Regular file — backup before replacing
+        if [ "$(checksum "$src")" = "$(checksum "$dst")" ]; then
+            echo "  ✅ $name (synced)"
+            manifest_entries+=("$dst")
+            return
+        fi
         if ! $DRY_RUN; then
-            if ! $backup_needed; then
-                mkdir -p "$BACKUP_DIR"
-                backup_needed=true
-            fi
+            ensure_backup_dir
             mv "$dst" "$BACKUP_DIR/$name"
             echo "  📦 Backed up: $dst → $BACKUP_DIR/$name"
         else
-            echo "  [dry-run] Would backup and link: $name"
+            echo "  [dry-run] Would backup and copy: $name"
             return
         fi
     fi
 
     if $DRY_RUN; then
-        echo "  [dry-run] Would link: $dst → $src"
+        echo "  [dry-run] Would copy: $src → $dst"
     else
-        ln -s "$src" "$dst"
-        echo "  🔗 Linked: $dst → $src"
+        cp "$src" "$dst"
+        echo "  📋 Copied: $name"
     fi
+    manifest_entries+=("$dst")
 }
 
-# Check for Claude Code agent conflicts
+deploy_dir() {
+    local src="$1"
+    local dst="$2"
+    local name="$(basename "$src")"
+
+    if [ -L "$dst" ]; then
+        if ! $DRY_RUN; then
+            ensure_backup_dir
+            mv "$dst" "$BACKUP_DIR/$name"
+            echo "  📦 Backed up (symlink): $dst → $BACKUP_DIR/$name"
+        else
+            echo "  [dry-run] Would backup symlink and copy: $name/"
+            return
+        fi
+    elif [ -d "$dst" ]; then
+        if [ "$(checksum_dir "$src")" = "$(checksum_dir "$dst")" ]; then
+            echo "  ✅ $name/ (synced)"
+            manifest_entries+=("$dst")
+            return
+        fi
+        if ! $DRY_RUN; then
+            ensure_backup_dir
+            mv "$dst" "$BACKUP_DIR/$name"
+            echo "  📦 Backed up: $dst → $BACKUP_DIR/$name"
+        else
+            echo "  [dry-run] Would backup and copy: $name/"
+            return
+        fi
+    fi
+
+    if $DRY_RUN; then
+        echo "  [dry-run] Would copy: $src → $dst"
+    else
+        cp -r "$src" "$dst"
+        echo "  📋 Copied: $name/"
+    fi
+    manifest_entries+=("$dst")
+}
+
 CLAUDE_AGENTS="$HOME/.claude/agents"
 if [ -d "$CLAUDE_AGENTS" ]; then
     for f in "$AGENTS_SRC"/*.md; do
@@ -241,13 +306,13 @@ fi
 
 echo "Agents:"
 for f in "$AGENTS_SRC"/*.md; do
-    link_file "$f" "$AGENTS_DST/$(basename "$f")"
+    deploy_file "$f" "$AGENTS_DST/$(basename "$f")"
 done
 
 echo ""
 echo "Rules:"
 for f in "$RULES_SRC"/*.mdc; do
-    link_file "$f" "$RULES_DST/$(basename "$f")"
+    deploy_file "$f" "$RULES_DST/$(basename "$f")"
 done
 
 echo ""
@@ -255,11 +320,18 @@ echo "Skills:"
 if [ -d "$SKILLS_SRC" ]; then
     for d in "$SKILLS_SRC"/*/; do
         name="$(basename "$d")"
-        # Skills are symlinked as directories (each skill is a folder with SKILL.md)
-        link_file "${d%/}" "$SKILLS_DST/$name"
+        deploy_dir "${d%/}" "$SKILLS_DST/$name"
     done
+fi
+
+if ! $DRY_RUN && [ ${#manifest_entries[@]} -gt 0 ]; then
+    printf '%s\n' "${manifest_entries[@]}" > "$MANIFEST"
 fi
 
 echo ""
 echo "Done."
-$DRY_RUN && echo "(Re-run without --dry-run to apply changes)"
+if $DRY_RUN; then
+    echo "(Re-run without --dry-run to apply changes)"
+else
+    echo "Manifest written: $MANIFEST (${#manifest_entries[@]} entries)"
+fi
