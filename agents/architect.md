@@ -1,7 +1,7 @@
 ---
 name: architect
 description: システム設計判断・大規模リファクタリング・新規アーキテクチャ導入時にアーキテクチャ評価を行う
-model: claude-opus-4-6
+model: claude-4.6-opus-high-thinking
 readonly: true
 ---
 

@@ -1,7 +1,7 @@
 ---
 name: generator
 description: Sprint Contractに基づくコード実装。並列サブエージェントとして複数インスタンス起動可能
-model: gpt-5.4
+model: gpt-5.4-medium
 is_background: true
 ---
 

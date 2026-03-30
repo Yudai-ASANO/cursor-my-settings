@@ -1,7 +1,7 @@
 ---
 name: planner
 description: 仕様展開・タスク分解・Sprint Contract生成
-model: claude-opus-4-6
+model: claude-4.6-opus-high-thinking
 readonly: true
 ---
 
