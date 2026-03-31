@@ -47,15 +47,13 @@ alwaysApply: true
 
 ---
 
-## 共通ゲート（概要）
+## 共通ゲート（必須）
 
-- **Gate 0**: Sprint Contract 交渉 — planner → qa-reviewer の検証基準レビュー
-- **Gate 1**: ユーザー確認 — Contract に同意を得てから実装に進む
-- **Gate 2**: lint/format/typecheck/test — 省略不可
-- **Gate 3**: PASS/FAIL 判定 — レビュアーごとに最大3回リトライ
+以下のゲートは全チェーンで省略不可。詳細・並列実行モード・ハンドオフ形式は **`orchestration.mdc` を Read ツールで読み込むこと**。
 
----
-
-## オーケストレーション実行時の詳細
-
-上記チェーンに従いオーケストレーションを実行する際は、**`orchestration.mdc` を Read ツールで読み込むこと**。ゲートの詳細ルール、並列実行モード（best-of-N / タスク分割）、ハンドオフ artifact の形式が定義されている。
+| ゲート | 内容 |
+|--------|------|
+| Gate 0 | Sprint Contract 交渉 — planner → qa-reviewer の検証基準レビュー |
+| Gate 1 | ユーザー確認 — Contract への明示的な同意を得てから実装に進む |
+| Gate 2 | lint / format / typecheck / test — 省略不可 |
+| Gate 3 | PASS/FAIL 判定 — レビュアーごとに最大3回リトライ。3回 FAIL → 停止してユーザーに報告 |

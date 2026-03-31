@@ -32,6 +32,13 @@
         "command": "./hooks/pre-compact-checkpoint.sh",
         "timeout": 30
       }
+    ],
+    "stop": [
+      {
+        "command": "./hooks/grind.sh",
+        "timeout": 10,
+        "loop_limit": 5
+      }
     ]
   }
 }
