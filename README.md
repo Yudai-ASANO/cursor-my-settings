@@ -16,9 +16,6 @@ Rules（行動規約）・Agents（専門エージェント）・Skills（ユー
 
 ## セットアップ
 
-> **注意**: Skills・Subagents 機能は Cursor **nightly チャンネル**（v2.4 以降）が必要です。
-> Cursor Settings → Beta → Update Channel を Nightly に設定してください。
-
 `scripts/deploy.sh` を実行して `~/.cursor/` へファイルをコピーする。
 
 ```bash
