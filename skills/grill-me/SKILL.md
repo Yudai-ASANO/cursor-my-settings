@@ -1,10 +1,36 @@
 ---
 name: grill-me
-description: Interview the user relentlessly about a plan or design until reaching shared understanding, resolving each branch of the decision tree. Use when user wants to stress-test a plan, get grilled on their design, or mentions "grill me".
+description: >-
+  実装やリポジトリ変更に限らない計画・設計（ドキュメント案やプロセス設計を含む）を、設計ツリーに沿って徹底インタビューし、意思決定の依存を一つずつ解いて共通理解に至る。
+  プランのストレステスト、設計の詰め、ユーザーが「grill me」と言及したとき、または /grill-me で明示起動したときに使う。
+disable-model-invocation: true
 ---
 
-Interview me relentlessly about every aspect of this plan until we reach a shared understanding. Walk down each branch of the design tree, resolving dependencies between decisions one-by-one. For each question, provide your recommended answer.
+# grill-me
 
-Ask the questions one at a time.
+## いつ使うか
 
-If a question can be answered by exploring the codebase, explore the codebase instead.
+- プラン・設計・方針を詰めたいとき（意思決定の抜け・矛盾を潰す）
+- ストレステストや突っ込み前提の対話が欲しい
+- ユーザーが **grill me** と言っている、またはチャットで **`/grill-me`** を選んだ
+
+## 手順
+
+1. この計画のあらゆる側面について、**共通理解に至るまで**質問を続ける。設計ツリーの各分岐をたどり、意思決定同士の**依存関係を一つずつ**解消する。
+2. **各質問では推奨回答も必ず示す**（採用しやすくしつつ反論もしやすくする）。
+3. **質問は一度に一つ**だけ出す。
+4. **コードベースを調べれば答えられること**は質問にしない。`Read` / `Grep` / `Glob` / `SemanticSearch`（および必要に応じて read-only の `Task`）で解決する。
+5. 選択肢の整理が有効なときは、利用可能なら **AskQuestion** でユーザーの回答を取る。
+
+## リポジトリを壊さないこと
+
+Q&A と design review では **Plan mode** を使う。**ユーザーが Plan mode を終了し、ファイル変更やリポジトリを壊しうる作業を明示的に許可するまで**、ファイル変更（`Edit` / `Write` / `NotebookEdit` 等）や危険な `Bash`（インストール、`rm`、git write 等）は行わない。調査には `Read` / `Grep` / `Glob` / `SemanticSearch` および調査・レビュー向けの read-only `Task` を使う。草案の更新と採否サマリは会話内（または自分の応答）に収め、レビュー用の状態を repo に書き残さない。design review 中の草案改訂もコードベースへの書き込みはしない。
+
+## サブエージェント（Task）
+
+- 初期または Q&A 途中で広い調査が必要なら、**read-only** の researcher を `Task` で起動してよい（独立テーマは同一メッセージ内で並列、依存があるものだけ逐次）。依頼に「コード変更なし・read-only」と、[agents/researcher.md](../../agents/researcher.md) の出力契約を明示する。
+- Q&A が十分そろったと捉えたうえで、**草案を design-reviewer に回す／設計レビューのラウンドを開始する**とユーザーと共通認識できたあと、草案を `Task` で **design-reviewer** に渡す（readonly・コード変更禁止、プロンプトに [agents/design-reviewer.md](../../agents/design-reviewer.md) の全文または要点）。返答では指摘を会話内で採否し採用分だけ草案に反映し、`## 総合 verdict` とラウンド上限（目安 5）に沿って続行・打ち切りする。**採否ループや Sprint Construct の扱いは design-reviewer には任せず、親エージェントが判断する**（レビューの見出し・ISSUE 形式・ verdict の定義は design-reviewer ファイルに従う）。ソフトウェア実装だけでなく、プロセス設計やドキュメント案などでも同様。
+
+## 承認却下後
+
+確定文案や Sprint Construct を提示したうえでユーザーに進めてよいか確認し、却下された場合は却下理由を踏まえて Q&A に戻る。**再度、草案のレビューラウンドに入る共通認識**が得られたら design review は最初のラウンドからやり直す。
