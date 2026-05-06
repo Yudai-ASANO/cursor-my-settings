@@ -1,0 +1,24 @@
+---
+description: Git操作・コミットメッセージ・PR作成時のワークフロールール
+alwaysApply: false
+---
+
+# Git Workflow
+
+## Commit Message
+
+```
+<type>: <description>
+
+<optional body>
+```
+
+Types: `feat`, `fix`, `refactor`, `docs`, `test`, `chore`, `perf`, `ci`
+
+- Conventional Commits。why を 1〜2 文で。秘密・認証ファイルのコミットは `security.mdc` に従う。
+
+## Pull Request
+
+1. ブランチ全体の履歴を踏まえ、`git diff [base-branch]...HEAD` で差分を確認する。
+2. サマリーと、TODO 形式のテストプランを書く。
+3. 新ブランチの初回 push は `-u` を付ける。

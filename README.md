@@ -2,28 +2,35 @@
 
 Cursor の個人設定を最小の常時コンテキストで管理するためのリポジトリです。
 
-日常的に有効化する設定は `rules/personal-defaults.mdc` だけです。特定の技術、固定手順、実装プロセス、ローカル実行フックは既定では含めません。
+常時適用の軸は `rules/defaults.mdc` です。実装方針・セキュリティ・Git は兄弟ルール（`coding-policy.mdc` / `security.mdc` / `git-workflow.mdc`）に分離しています。エージェント定義・スキル・フックはリポジトリに置いてありますが、デプロイ既定ではルールのみです。
 
 ## Structure
 
 ```text
 .
-├── agents/          # 将来用。既定では無効
-├── hooks/           # 将来用。既定では無効
-├── rules/           # 常時適用する最小ルール
+├── agents/          # エージェント定義（*.md）。deploy では --with-agents が必要
+├── hooks/           # 任意フック用。hooks.json / *.sh があれば --with-hooks で反映
+├── rules/           # 常時・条件付きルール（*.mdc）
 ├── scripts/         # ~/.cursor への反映スクリプト
-└── skills/          # 将来用。既定では無効
+└── skills/          # SKILL.md を含むサブディレクトリ。--with-skills が必要
 ```
 
-## Active Rule
+### agents/
 
-`rules/personal-defaults.mdc` は以下だけを扱います。
+例: `design-reviewer.md`, `explainer.md`, `rca.md`, `researcher.md`（用途ごとのプロンプト集）。
 
-- 必要なファイルだけを読む
-- ローカルの事実を確認してから答える
-- 依頼範囲を広げない
-- 秘密情報や破壊的操作に注意する
-- 変更内容と確認結果を簡潔に報告する
+### rules/
+
+| ファイル | 役割 |
+| -------- | ---- |
+| `defaults.mdc` | `alwaysApply: true`。言語方針・コンテキスト・スコープ・安全・報告、および兄弟ルールの索引 |
+| `coding-policy.mdc` | 実装・設計・変更範囲・品質 |
+| `security.mdc` | 認証・API・環境ファイルなど（グロブ一致時に自動適用） |
+| `git-workflow.mdc` | コミット・PR |
+
+### skills/
+
+例: `explain/`, `grill-me/`, `research/`（各 `SKILL.md`）。
 
 ## Deploy
 
@@ -36,7 +43,7 @@ bash scripts/deploy.sh --status
 bash scripts/deploy.sh --uninstall
 ```
 
-将来、任意カテゴリを追加した場合だけ明示的に指定します。
+エージェント・スキル・フックを反映するときだけフラグを付けます。
 
 ```bash
 bash scripts/deploy.sh --with-agents
@@ -46,7 +53,7 @@ bash scripts/deploy.sh --with-hooks
 
 ## Policy
 
-- 常時適用ルールは少なく保つ。
+- 常時適用ルールは `defaults.mdc` を薄く保ち、詳細は兄弟 `.mdc` に寄せる。
 - 技術固有の知識はプロジェクト側から読む。
-- 固定手順は個人設定に入れない。
-- hooks、skills、agents は必要性が明確な場合だけ追加する。
+- 固定手順は個人設定に詰め込みすぎない。
+- エージェント・スキル・フックは必要性が明確なときだけ `deploy.sh` で有効化する。
