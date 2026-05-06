@@ -1,20 +1,17 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Cursor Personal Harness — Deploy Script
-# Copies agents/, rules/, and skills/ from this project to ~/.cursor/
-
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+REPO_DIR="$(dirname "$SCRIPT_DIR")"
 CURSOR_DIR="$HOME/.cursor"
 BACKUP_DIR="$CURSOR_DIR/.backup/$(date +%Y%m%d-%H%M%S)"
 MANIFEST="$CURSOR_DIR/.deploy-manifest"
 
-AGENTS_SRC="$PROJECT_DIR/agents"
-RULES_SRC="$PROJECT_DIR/rules"
-SKILLS_SRC="$PROJECT_DIR/skills"
-HOOKS_SRC="$PROJECT_DIR/hooks"
-HOOKS_JSON_SRC="$HOOKS_SRC/hooks.json"
+AGENTS_SRC="$REPO_DIR/agents"
+RULES_SRC="$REPO_DIR/rules"
+SKILLS_SRC="$REPO_DIR/skills"
+HOOKS_SRC="$REPO_DIR/hooks"
+
 AGENTS_DST="$CURSOR_DIR/agents"
 RULES_DST="$CURSOR_DIR/rules"
 SKILLS_DST="$CURSOR_DIR/skills"
@@ -24,24 +21,34 @@ HOOKS_JSON_DST="$CURSOR_DIR/hooks.json"
 DRY_RUN=false
 UNINSTALL=false
 STATUS=false
+WITH_AGENTS=false
+WITH_SKILLS=false
+WITH_HOOKS=false
 
 usage() {
-    echo "Usage: $0 [--dry-run|--uninstall|--status]"
-    echo ""
-    echo "  (no args)    Deploy (copy) files to ~/.cursor/"
-    echo "  --dry-run    Show what would be done without making changes"
-    echo "  --uninstall  Remove files deployed by this script"
-    echo "  --status     Show sync status (checksum comparison)"
+    printf '%s\n' "Usage: $0 [--dry-run] [--status|--uninstall] [--with-agents] [--with-skills] [--with-hooks]"
+    printf '%s\n' ""
+    printf '%s\n' "Default deploy target: rules only."
+    printf '%s\n' ""
+    printf '%s\n' "  --dry-run       Show what would change"
+    printf '%s\n' "  --status        Show sync status"
+    printf '%s\n' "  --uninstall     Remove files recorded in the deploy manifest"
+    printf '%s\n' "  --with-agents   Also deploy agent definition files"
+    printf '%s\n' "  --with-skills   Also deploy skill directories containing SKILL.md"
+    printf '%s\n' "  --with-hooks    Also deploy hooks.json and hook scripts, if present"
     exit 0
 }
 
 for arg in "$@"; do
     case "$arg" in
-        --dry-run)  DRY_RUN=true ;;
+        --dry-run) DRY_RUN=true ;;
+        --status) STATUS=true ;;
         --uninstall) UNINSTALL=true ;;
-        --status)   STATUS=true ;;
-        --help|-h)  usage ;;
-        *) echo "Unknown option: $arg"; usage ;;
+        --with-agents) WITH_AGENTS=true ;;
+        --with-skills) WITH_SKILLS=true ;;
+        --with-hooks) WITH_HOOKS=true ;;
+        --help|-h) usage ;;
+        *) printf 'Unknown option: %s\n' "$arg"; usage ;;
     esac
 done
 
@@ -50,384 +57,288 @@ checksum() {
 }
 
 checksum_dir() {
-    find "$1" -type f -print0 | sort -z | xargs -0 shasum -a 256 2>/dev/null | awk '{print $1}' | shasum -a 256 | awk '{print $1}'
+    find "$1" -type f -print0 2>/dev/null | sort -z | xargs -0 shasum -a 256 2>/dev/null | awk '{print $1}' | shasum -a 256 | awk '{print $1}'
 }
-
-# --- Status ---
-if $STATUS; then
-    echo "=== Cursor Harness Status ==="
-    echo ""
-    echo "Agents ($AGENTS_DST):"
-    for f in "$AGENTS_SRC"/*.md; do
-        name="$(basename "$f")"
-        target="$AGENTS_DST/$name"
-        if [ -L "$target" ]; then
-            echo "  ⚠️  $name (symlink — run deploy to convert)"
-        elif [ -f "$target" ]; then
-            if [ "$(checksum "$f")" = "$(checksum "$target")" ]; then
-                echo "  ✅ $name (synced)"
-            else
-                echo "  ⚠️  $name (modified)"
-            fi
-        else
-            echo "  ❌ $name (not deployed)"
-        fi
-    done
-    echo ""
-    echo "Rules ($RULES_DST):"
-    for f in "$RULES_SRC"/*.mdc; do
-        name="$(basename "$f")"
-        target="$RULES_DST/$name"
-        if [ -L "$target" ]; then
-            echo "  ⚠️  $name (symlink — run deploy to convert)"
-        elif [ -f "$target" ]; then
-            if [ "$(checksum "$f")" = "$(checksum "$target")" ]; then
-                echo "  ✅ $name (synced)"
-            else
-                echo "  ⚠️  $name (modified)"
-            fi
-        else
-            echo "  ❌ $name (not deployed)"
-        fi
-    done
-    echo ""
-    echo "Skills ($SKILLS_DST):"
-    if [ -d "$SKILLS_SRC" ]; then
-        for d in "$SKILLS_SRC"/*/; do
-            name="$(basename "$d")"
-            target="$SKILLS_DST/$name"
-            if [ -L "$target" ]; then
-                echo "  ⚠️  $name (symlink — run deploy to convert)"
-            elif [ -d "$target" ]; then
-                if [ "$(checksum_dir "${d%/}")" = "$(checksum_dir "$target")" ]; then
-                    echo "  ✅ $name (synced)"
-                else
-                    echo "  ⚠️  $name (modified)"
-                fi
-            else
-                echo "  ❌ $name (not deployed)"
-            fi
-        done
-    fi
-    echo ""
-    echo "Hooks:"
-    if [ -f "$HOOKS_JSON_SRC" ]; then
-        if [ -L "$HOOKS_JSON_DST" ]; then
-            echo "  ⚠️  hooks.json (symlink — run deploy to convert)"
-        elif [ -f "$HOOKS_JSON_DST" ]; then
-            if [ "$(checksum "$HOOKS_JSON_SRC")" = "$(checksum "$HOOKS_JSON_DST")" ]; then
-                echo "  ✅ hooks.json (synced)"
-            else
-                echo "  ⚠️  hooks.json (modified)"
-            fi
-        else
-            echo "  ❌ hooks.json (not deployed)"
-        fi
-    fi
-    if [ -d "$HOOKS_SRC" ]; then
-        for f in "$HOOKS_SRC"/*.sh; do
-            name="$(basename "$f")"
-            target="$HOOKS_DST/$name"
-            if [ -L "$target" ]; then
-                echo "  ⚠️  $name (symlink — run deploy to convert)"
-            elif [ -f "$target" ]; then
-                if [ "$(checksum "$f")" = "$(checksum "$target")" ]; then
-                    echo "  ✅ $name (synced)"
-                else
-                    echo "  ⚠️  $name (modified)"
-                fi
-            else
-                echo "  ❌ $name (not deployed)"
-            fi
-        done
-    fi
-    echo ""
-    if [ -f "$MANIFEST" ]; then
-        echo "Manifest: $MANIFEST ($(wc -l < "$MANIFEST" | tr -d ' ') entries)"
-    else
-        echo "Manifest: not found (deploy has not been run with copy mode yet)"
-    fi
-    exit 0
-fi
-
-# --- Uninstall ---
-if $UNINSTALL; then
-    echo "=== Uninstalling Cursor Harness ==="
-    removed=0
-
-    if [ -f "$MANIFEST" ]; then
-        while IFS= read -r entry; do
-            if $DRY_RUN; then
-                echo "  [dry-run] Would remove: $entry"
-            elif [ -f "$entry" ]; then
-                rm "$entry"
-                echo "  Removed: $entry"
-            elif [ -d "$entry" ]; then
-                rm -r "$entry"
-                echo "  Removed: $entry"
-            else
-                echo "  Skipped (not found): $entry"
-                continue
-            fi
-            removed=$((removed + 1))
-        done < "$MANIFEST"
-
-        if ! $DRY_RUN; then
-            rm "$MANIFEST"
-            echo "  Removed: $MANIFEST"
-        fi
-    else
-        echo "  No manifest found. Falling back to name-based detection..."
-        echo ""
-        for f in "$AGENTS_SRC"/*.md; do
-            name="$(basename "$f")"
-            target="$AGENTS_DST/$name"
-            if [ -L "$target" ] || [ -f "$target" ]; then
-                if $DRY_RUN; then
-                    echo "  [dry-run] Would remove: $target"
-                else
-                    rm "$target"
-                    echo "  Removed: $target"
-                fi
-                removed=$((removed + 1))
-            fi
-        done
-        for f in "$RULES_SRC"/*.mdc; do
-            name="$(basename "$f")"
-            target="$RULES_DST/$name"
-            if [ -L "$target" ] || [ -f "$target" ]; then
-                if $DRY_RUN; then
-                    echo "  [dry-run] Would remove: $target"
-                else
-                    rm "$target"
-                    echo "  Removed: $target"
-                fi
-                removed=$((removed + 1))
-            fi
-        done
-        if [ -d "$SKILLS_SRC" ]; then
-            for d in "$SKILLS_SRC"/*/; do
-                name="$(basename "$d")"
-                target="$SKILLS_DST/$name"
-                if [ -L "$target" ] || [ -d "$target" ]; then
-                    if $DRY_RUN; then
-                        echo "  [dry-run] Would remove: $target"
-                    else
-                        rm -r "$target"
-                        echo "  Removed: $target"
-                    fi
-                    removed=$((removed + 1))
-                fi
-            done
-        fi
-        if [ -f "$HOOKS_JSON_SRC" ] && { [ -L "$HOOKS_JSON_DST" ] || [ -f "$HOOKS_JSON_DST" ]; }; then
-            if $DRY_RUN; then
-                echo "  [dry-run] Would remove: $HOOKS_JSON_DST"
-            else
-                rm "$HOOKS_JSON_DST"
-                echo "  Removed: $HOOKS_JSON_DST"
-            fi
-            removed=$((removed + 1))
-        fi
-        if [ -d "$HOOKS_SRC" ]; then
-            for f in "$HOOKS_SRC"/*.sh; do
-                name="$(basename "$f")"
-                target="$HOOKS_DST/$name"
-                if [ -L "$target" ] || [ -f "$target" ]; then
-                    if $DRY_RUN; then
-                        echo "  [dry-run] Would remove: $target"
-                    else
-                        rm "$target"
-                        echo "  Removed: $target"
-                    fi
-                    removed=$((removed + 1))
-                fi
-            done
-        fi
-    fi
-
-    if [ -d "$HOOKS_DST" ] && [ -z "$(find "$HOOKS_DST" -mindepth 1 -maxdepth 1 2>/dev/null)" ]; then
-        if $DRY_RUN; then
-            echo "  [dry-run] Would remove empty directory: $HOOKS_DST"
-        else
-            rmdir "$HOOKS_DST"
-            echo "  Removed empty directory: $HOOKS_DST"
-        fi
-    fi
-
-    echo "Done. Removed $removed item(s)."
-    exit 0
-fi
-
-# --- Deploy ---
-echo "=== Deploying Cursor Harness ==="
-$DRY_RUN && echo "(dry-run mode — no changes will be made)"
-echo ""
-
-for dir in "$AGENTS_DST" "$RULES_DST" "$SKILLS_DST" "$HOOKS_DST"; do
-    if [ ! -d "$dir" ]; then
-        if $DRY_RUN; then
-            echo "  [dry-run] Would create: $dir"
-        else
-            mkdir -p "$dir"
-            echo "  Created: $dir"
-        fi
-    fi
-done
-
-manifest_entries=()
-backup_needed=false
 
 ensure_backup_dir() {
-    if ! $backup_needed; then
+    if [ ! -d "$BACKUP_DIR" ]; then
         mkdir -p "$BACKUP_DIR"
-        backup_needed=true
     fi
 }
 
-deploy_file() {
+has_glob_match() {
+    local pattern="$1"
+    compgen -G "$pattern" >/dev/null
+}
+
+copy_file() {
     local src="$1"
     local dst="$2"
-    local name=""
+    local name
 
     name="$(basename "$src")"
 
-    if [ -L "$dst" ]; then
-        if ! $DRY_RUN; then
-            ensure_backup_dir
-            mv "$dst" "$BACKUP_DIR/$name"
-            echo "  📦 Backed up (symlink): $dst → $BACKUP_DIR/$name"
-        else
-            echo "  [dry-run] Would backup symlink and copy: $name"
+    if [ -f "$dst" ] || [ -L "$dst" ]; then
+        if [ -f "$dst" ] && [ "$(checksum "$src")" = "$(checksum "$dst")" ]; then
+            printf '  synced: %s\n' "$dst"
+            MANIFEST_ENTRIES+=("$dst")
             return
         fi
-    elif [ -f "$dst" ]; then
-        if [ "$(checksum "$src")" = "$(checksum "$dst")" ]; then
-            echo "  ✅ $name (synced)"
-            manifest_entries+=("$dst")
+        if $DRY_RUN; then
+            printf '  [dry-run] Would back up and copy: %s\n' "$dst"
             return
         fi
-        if ! $DRY_RUN; then
-            ensure_backup_dir
-            mv "$dst" "$BACKUP_DIR/$name"
-            echo "  📦 Backed up: $dst → $BACKUP_DIR/$name"
-        else
-            echo "  [dry-run] Would backup and copy: $name"
-            return
-        fi
+        ensure_backup_dir
+        mv "$dst" "$BACKUP_DIR/$name"
+        printf '  backed up: %s\n' "$dst"
     fi
 
     if $DRY_RUN; then
-        echo "  [dry-run] Would copy: $src → $dst"
-    else
-        cp "$src" "$dst"
-        echo "  📋 Copied: $name"
+        printf '  [dry-run] Would copy: %s -> %s\n' "$src" "$dst"
+        return
     fi
-    manifest_entries+=("$dst")
+
+    mkdir -p "$(dirname "$dst")"
+    cp "$src" "$dst"
+    printf '  copied: %s\n' "$dst"
+    MANIFEST_ENTRIES+=("$dst")
 }
 
-deploy_dir() {
+copy_dir() {
     local src="$1"
     local dst="$2"
-    local name=""
+    local name
 
     name="$(basename "$src")"
 
-    if [ -L "$dst" ]; then
-        if ! $DRY_RUN; then
-            ensure_backup_dir
-            mv "$dst" "$BACKUP_DIR/$name"
-            echo "  📦 Backed up (symlink): $dst → $BACKUP_DIR/$name"
-        else
-            echo "  [dry-run] Would backup symlink and copy: $name/"
+    if [ -d "$dst" ] || [ -L "$dst" ]; then
+        if [ -d "$dst" ] && [ "$(checksum_dir "$src")" = "$(checksum_dir "$dst")" ]; then
+            printf '  synced: %s\n' "$dst"
+            MANIFEST_ENTRIES+=("$dst")
             return
         fi
-    elif [ -d "$dst" ]; then
-        if [ "$(checksum_dir "$src")" = "$(checksum_dir "$dst")" ]; then
-            echo "  ✅ $name/ (synced)"
-            manifest_entries+=("$dst")
+        if $DRY_RUN; then
+            printf '  [dry-run] Would back up and copy: %s\n' "$dst"
             return
         fi
-        if ! $DRY_RUN; then
-            ensure_backup_dir
-            mv "$dst" "$BACKUP_DIR/$name"
-            echo "  📦 Backed up: $dst → $BACKUP_DIR/$name"
-        else
-            echo "  [dry-run] Would backup and copy: $name/"
-            return
-        fi
+        ensure_backup_dir
+        mv "$dst" "$BACKUP_DIR/$name"
+        printf '  backed up: %s\n' "$dst"
     fi
 
     if $DRY_RUN; then
-        echo "  [dry-run] Would copy: $src → $dst"
-    else
-        cp -r "$src" "$dst"
-        echo "  📋 Copied: $name/"
+        printf '  [dry-run] Would copy: %s -> %s\n' "$src" "$dst"
+        return
     fi
-    manifest_entries+=("$dst")
+
+    mkdir -p "$(dirname "$dst")"
+    cp -R "$src" "$dst"
+    printf '  copied: %s\n' "$dst"
+    MANIFEST_ENTRIES+=("$dst")
 }
 
-deploy_executable_file() {
+show_file_status() {
     local src="$1"
     local dst="$2"
+    local label="$3"
 
-    deploy_file "$src" "$dst"
-    if $DRY_RUN; then
-        echo "  [dry-run] Would chmod +x: $dst"
+    if [ ! -f "$src" ]; then
+        return
+    fi
+    if [ -f "$dst" ] && [ "$(checksum "$src")" = "$(checksum "$dst")" ]; then
+        printf '  synced: %s\n' "$label"
+    elif [ -e "$dst" ] || [ -L "$dst" ]; then
+        printf '  changed: %s\n' "$label"
     else
-        chmod +x "$dst"
+        printf '  missing: %s\n' "$label"
     fi
 }
 
-CLAUDE_AGENTS="$HOME/.claude/agents"
-if [ -d "$CLAUDE_AGENTS" ]; then
-    for f in "$AGENTS_SRC"/*.md; do
-        name="$(basename "$f")"
-        if [ -f "$CLAUDE_AGENTS/$name" ]; then
-            echo "  ⚠️  WARNING: $name also exists in ~/.claude/agents/ (Cursor may load both)"
+show_dir_status() {
+    local src="$1"
+    local dst="$2"
+    local label="$3"
+
+    if [ ! -d "$src" ]; then
+        return
+    fi
+    if [ -d "$dst" ] && [ "$(checksum_dir "$src")" = "$(checksum_dir "$dst")" ]; then
+        printf '  synced: %s\n' "$label"
+    elif [ -e "$dst" ] || [ -L "$dst" ]; then
+        printf '  changed: %s\n' "$label"
+    else
+        printf '  missing: %s\n' "$label"
+    fi
+}
+
+remove_manifest_entries() {
+    if [ ! -f "$MANIFEST" ]; then
+        printf 'No manifest found: %s\n' "$MANIFEST"
+        return 0
+    fi
+
+    while IFS= read -r entry; do
+        [ -n "$entry" ] || continue
+        if [ -f "$entry" ] || [ -L "$entry" ]; then
+            if $DRY_RUN; then
+                printf '  [dry-run] Would remove: %s\n' "$entry"
+            else
+                rm "$entry"
+                printf '  removed: %s\n' "$entry"
+            fi
+        elif [ -d "$entry" ]; then
+            if $DRY_RUN; then
+                printf '  [dry-run] Would remove: %s\n' "$entry"
+            else
+                rm -r "$entry"
+                printf '  removed: %s\n' "$entry"
+            fi
         fi
+    done < "$MANIFEST"
+
+    if ! $DRY_RUN; then
+        rm "$MANIFEST"
+        printf '  removed: %s\n' "$MANIFEST"
+    fi
+}
+
+if $STATUS; then
+    printf '%s\n' "=== Cursor Personal Settings Status ==="
+    printf '%s\n' ""
+    printf '%s\n' "Rules:"
+    if has_glob_match "$RULES_SRC/*.mdc"; then
+        for file in "$RULES_SRC"/*.mdc; do
+            show_file_status "$file" "$RULES_DST/$(basename "$file")" "$(basename "$file")"
+        done
+    else
+        printf '%s\n' "  none"
+    fi
+
+    printf '%s\n' ""
+    printf '%s\n' "Optional agents:"
+    found=false
+    if has_glob_match "$AGENTS_SRC/*.md"; then
+        for file in "$AGENTS_SRC"/*.md; do
+            [ "$(basename "$file")" != "README.md" ] || continue
+            found=true
+            show_file_status "$file" "$AGENTS_DST/$(basename "$file")" "$(basename "$file")"
+        done
+    fi
+    if ! $found; then
+        printf '%s\n' "  none"
+    fi
+
+    printf '%s\n' ""
+    printf '%s\n' "Optional skills:"
+    if has_glob_match "$SKILLS_SRC/*/SKILL.md"; then
+        for skill_file in "$SKILLS_SRC"/*/SKILL.md; do
+            dir="$(dirname "$skill_file")"
+            show_dir_status "$dir" "$SKILLS_DST/$(basename "$dir")" "$(basename "$dir")"
+        done
+    else
+        printf '%s\n' "  none"
+    fi
+
+    printf '%s\n' ""
+    printf '%s\n' "Optional hooks:"
+    if [ -f "$HOOKS_SRC/hooks.json" ]; then
+        show_file_status "$HOOKS_SRC/hooks.json" "$HOOKS_JSON_DST" "hooks.json"
+    fi
+    if has_glob_match "$HOOKS_SRC/*.sh"; then
+        for file in "$HOOKS_SRC"/*.sh; do
+            show_file_status "$file" "$HOOKS_DST/$(basename "$file")" "$(basename "$file")"
+        done
+    elif [ ! -f "$HOOKS_SRC/hooks.json" ]; then
+        printf '%s\n' "  none"
+    fi
+
+    printf '%s\n' ""
+    if [ -f "$MANIFEST" ]; then
+        printf 'Manifest: %s (%s entries)\n' "$MANIFEST" "$(wc -l < "$MANIFEST" | tr -d ' ')"
+    else
+        printf 'Manifest: none\n'
+    fi
+    exit 0
+fi
+
+if $UNINSTALL; then
+    printf '%s\n' "=== Uninstalling Cursor Personal Settings ==="
+    remove_manifest_entries
+    exit 0
+fi
+
+printf '%s\n' "=== Deploying Cursor Personal Settings ==="
+$DRY_RUN && printf '%s\n' "(dry-run mode)"
+printf '%s\n' "Default target: rules"
+$WITH_AGENTS && printf '%s\n' "Optional target: agents"
+$WITH_SKILLS && printf '%s\n' "Optional target: skills"
+$WITH_HOOKS && printf '%s\n' "Optional target: hooks"
+printf '%s\n' ""
+
+MANIFEST_ENTRIES=()
+
+printf '%s\n' "Rules:"
+if has_glob_match "$RULES_SRC/*.mdc"; then
+    for file in "$RULES_SRC"/*.mdc; do
+        copy_file "$file" "$RULES_DST/$(basename "$file")"
     done
-fi
-
-echo "Agents:"
-for f in "$AGENTS_SRC"/*.md; do
-    deploy_file "$f" "$AGENTS_DST/$(basename "$f")"
-done
-
-echo ""
-echo "Rules:"
-for f in "$RULES_SRC"/*.mdc; do
-    deploy_file "$f" "$RULES_DST/$(basename "$f")"
-done
-
-echo ""
-echo "Skills:"
-if [ -d "$SKILLS_SRC" ]; then
-    for d in "$SKILLS_SRC"/*/; do
-        name="$(basename "$d")"
-        deploy_dir "${d%/}" "$SKILLS_DST/$name"
-    done
-fi
-
-echo ""
-echo "Hooks:"
-if [ -f "$HOOKS_JSON_SRC" ]; then
-    deploy_file "$HOOKS_JSON_SRC" "$HOOKS_JSON_DST"
-fi
-if [ -d "$HOOKS_SRC" ]; then
-    for f in "$HOOKS_SRC"/*.sh; do
-        deploy_executable_file "$f" "$HOOKS_DST/$(basename "$f")"
-    done
-fi
-
-if ! $DRY_RUN && [ ${#manifest_entries[@]} -gt 0 ]; then
-    printf '%s\n' "${manifest_entries[@]}" > "$MANIFEST"
-fi
-
-echo ""
-echo "Done."
-if $DRY_RUN; then
-    echo "(Re-run without --dry-run to apply changes)"
 else
-    echo "Manifest written: $MANIFEST (${#manifest_entries[@]} entries)"
+    printf '%s\n' "  none"
 fi
+
+if $WITH_AGENTS; then
+    printf '%s\n' ""
+    printf '%s\n' "Agents:"
+    found=false
+    if has_glob_match "$AGENTS_SRC/*.md"; then
+        for file in "$AGENTS_SRC"/*.md; do
+            [ "$(basename "$file")" != "README.md" ] || continue
+            found=true
+            copy_file "$file" "$AGENTS_DST/$(basename "$file")"
+        done
+    fi
+    $found || printf '%s\n' "  none"
+fi
+
+if $WITH_SKILLS; then
+    printf '%s\n' ""
+    printf '%s\n' "Skills:"
+    found=false
+    if has_glob_match "$SKILLS_SRC/*/SKILL.md"; then
+        for skill_file in "$SKILLS_SRC"/*/SKILL.md; do
+            dir="$(dirname "$skill_file")"
+            found=true
+            copy_dir "$dir" "$SKILLS_DST/$(basename "$dir")"
+        done
+    fi
+    $found || printf '%s\n' "  none"
+fi
+
+if $WITH_HOOKS; then
+    printf '%s\n' ""
+    printf '%s\n' "Hooks:"
+    found=false
+    if [ -f "$HOOKS_SRC/hooks.json" ]; then
+        found=true
+        copy_file "$HOOKS_SRC/hooks.json" "$HOOKS_JSON_DST"
+    fi
+    if has_glob_match "$HOOKS_SRC/*.sh"; then
+        for file in "$HOOKS_SRC"/*.sh; do
+            found=true
+            copy_file "$file" "$HOOKS_DST/$(basename "$file")"
+            if ! $DRY_RUN; then
+                chmod +x "$HOOKS_DST/$(basename "$file")"
+            fi
+        done
+    fi
+    $found || printf '%s\n' "  none"
+fi
+
+if ! $DRY_RUN; then
+    mkdir -p "$CURSOR_DIR"
+    printf '%s\n' "${MANIFEST_ENTRIES[@]}" > "$MANIFEST"
+    printf '%s\n' ""
+    printf 'Manifest written: %s (%s entries)\n' "$MANIFEST" "${#MANIFEST_ENTRIES[@]}"
+fi
+
+printf '%s\n' "Done."
