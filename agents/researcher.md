@@ -1,7 +1,7 @@
 ---
 name: researcher
 description: テーマを根拠付きで調査し、固定見出しで報告する。実装・修正は行わない。コードは読取のみ。
-model: composer-2
+model: composer-2.5
 readonly: true
 is_background: true
 ---
